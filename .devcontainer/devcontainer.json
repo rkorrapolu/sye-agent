@@ -1,0 +1,54 @@
+{
+  "name": "SYE Agent - Claude Code Reasoning Layer",
+  "dockerComposeFile": "../docker-compose.yml",
+  "service": "claude-reasoning",
+  "workspaceFolder": "/workspace",
+  "shutdownAction": "stopCompose",
+  
+  "features": {
+    "ghcr.io/devcontainers/features/docker-in-docker:2": {
+      "version": "latest",
+      "moby": true
+    },
+    "ghcr.io/devcontainers/features/node:1": {
+      "version": "18"
+    },
+    "ghcr.io/devcontainers/features/python:1": {
+      "version": "3.11"
+    }
+  },
+
+  "customizations": {
+    "vscode": {
+      "extensions": [
+        "ms-python.python",
+        "ms-python.black-formatter",
+        "ms-vscode.vscode-json",
+        "ms-vscode.docker",
+        "neo4j.cypher",
+        "charliermarsh.ruff"
+      ],
+      "settings": {
+        "python.defaultInterpreterPath": "/usr/local/bin/python",
+        "python.formatting.provider": "black",
+        "claude.dangerouslySkipPermissions": true
+      }
+    }
+  },
+
+  "mounts": [
+    "source=/var/run/docker.sock,target=/var/run/docker.sock,type=bind",
+    "source=${localWorkspaceFolder},target=/workspace,type=bind"
+  ],
+
+  "remoteEnv": {
+    "NEO4J_URI": "bolt://neo4j:7687",
+    "NEO4J_USER": "neo4j", 
+    "NEO4J_PASSWORD": "password123",
+    "REDIS_URL": "redis://redis:6379",
+    "CLAUDE_DANGEROUS_SKIP_PERMISSIONS": "true"
+  },
+
+  "postCreateCommand": "bash .devcontainer/setup.sh",
+  "postStartCommand": "echo 'SYE Claude Reasoning Layer Ready! 🧠'"
+}

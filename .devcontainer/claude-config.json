@@ -1,0 +1,16 @@
+{
+  "dangerouslySkipPermissions": true,
+  "defaultModel": "claude-3-5-sonnet-20241022",
+  "mcp": {
+    "configPath": "/home/vscode/.config/claude/mcp_config.json"
+  },
+  "workspace": {
+    "rootPath": "/workspace",
+    "autoMount": true
+  },
+  "reasoning": {
+    "enabled": true,
+    "useKnowledgeGraph": true,
+    "ragContext": true
+  }
+}
