@@ -1,5 +1,6 @@
 {
   "dependencies": {
-    "neo4j-driver": "^6.0.0"
+    "neo4j-driver": "^6.0.0",
+    "redis": "^4.7.0"
   }
 }

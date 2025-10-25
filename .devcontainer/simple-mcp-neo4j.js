@@ -2,12 +2,17 @@
 
 // Simple Neo4j interface for Claude Code MCP integration
 const neo4j = require('neo4j-driver');
+const redis = require('redis');
+const crypto = require('crypto');
 const http = require('http');
 
 class SimpleNeo4jMCP {
   constructor() {
     this.driver = null;
+    this.redisClient = null;
+    this.cacheStats = { hits: 0, misses: 0 };
     this.connect();
+    this.connectRedis();
     this.startServer();
   }
 
@@ -26,6 +31,192 @@ class SimpleNeo4jMCP {
     } catch (error) {
       console.error('❌ Failed to connect to Neo4j:', error.message);
     }
+  }
+
+  async connectRedis() {
+    const redisUrl = process.env.REDIS_URL || 'redis://redis:6379';
+    
+    try {
+      this.redisClient = redis.createClient({ url: redisUrl });
+      
+      this.redisClient.on('error', (err) => {
+        console.error('❌ Redis Client Error:', err);
+      });
+      
+      this.redisClient.on('connect', () => {
+        console.log('✅ Connected to Redis at', redisUrl);
+      });
+      
+      await this.redisClient.connect();
+    } catch (error) {
+      console.error('❌ Failed to connect to Redis:', error.message);
+      this.redisClient = null;
+    }
+  }
+
+  generateSymptomCacheKey(description) {
+    return `symptom:${crypto.createHash('md5').update(description.toLowerCase().trim()).digest('hex')}`;
+  }
+
+  async getCachedSymptomData(description) {
+    if (!this.redisClient) return null;
+    
+    try {
+      const cacheKey = this.generateSymptomCacheKey(description);
+      const cached = await this.redisClient.get(cacheKey);
+      
+      if (cached) {
+        this.cacheStats.hits++;
+        const data = JSON.parse(cached);
+        console.log(`🎯 Cache HIT for symptom: ${description.substring(0, 50)}...`);
+        return data;
+      }
+      
+      this.cacheStats.misses++;
+      console.log(`❌ Cache MISS for symptom: ${description.substring(0, 50)}...`);
+      return null;
+    } catch (error) {
+      console.error('Cache read error:', error);
+      return null;
+    }
+  }
+
+  async cacheSymptomData(description, symptomData, ttl = 3600) {
+    if (!this.redisClient) return;
+    
+    try {
+      const cacheKey = this.generateSymptomCacheKey(description);
+      
+      const fullContext = await this.getFullSymptomContext(symptomData.id);
+      
+      const cacheData = {
+        symptom: symptomData,
+        causes: fullContext.causes,
+        actions: fullContext.actions,
+        relationships: fullContext.relationships,
+        cached_at: new Date().toISOString(),
+        ttl
+      };
+      
+      await this.redisClient.setEx(cacheKey, ttl, JSON.stringify(cacheData));
+      console.log(`💾 Cached symptom data: ${description.substring(0, 50)}...`);
+    } catch (error) {
+      console.error('Cache write error:', error);
+    }
+  }
+
+  async getFullSymptomContext(symptomId) {
+    const session = this.driver.session();
+    try {
+      const result = await session.run(`
+        MATCH (s:Symptom {id: $symptomId})
+        OPTIONAL MATCH (s)-[r1:CAUSED_BY]->(c:Cause)
+        OPTIONAL MATCH (c)-[r2:ADDRESSED_BY]->(a:Action)
+        OPTIONAL MATCH (s)-[r3:SIMILAR_TO]->(similar:Symptom)
+        RETURN s,
+               collect(DISTINCT {cause: c, relationship: r1}) as causes,
+               collect(DISTINCT {action: a, relationship: r2}) as actions,
+               collect(DISTINCT {similar: similar, relationship: r3}) as relationships
+      `, { symptomId });
+      
+      if (result.records.length === 0) {
+        return { causes: [], actions: [], relationships: [] };
+      }
+      
+      const record = result.records[0];
+      return {
+        causes: record.get('causes').filter(c => c.cause !== null),
+        actions: record.get('actions').filter(a => a.action !== null),
+        relationships: record.get('relationships').filter(r => r.similar !== null)
+      };
+    } finally {
+      await session.close();
+    }
+  }
+
+  async invalidateSymptomCache(symptomId) {
+    if (!this.redisClient) return;
+    
+    try {
+      const session = this.driver.session();
+      const result = await session.run(`
+        MATCH (s:Symptom {id: $symptomId})
+        RETURN s.description as description
+      `, { symptomId });
+      await session.close();
+      
+      if (result.records.length > 0) {
+        const description = result.records[0].get('description');
+        const cacheKey = this.generateSymptomCacheKey(description);
+        await this.redisClient.del(cacheKey);
+        console.log(`🗑️  Invalidated cache for symptom: ${description.substring(0, 50)}...`);
+      }
+    } catch (error) {
+      console.error('Cache invalidation error:', error);
+    }
+  }
+
+  async warmCache(limit = 50) {
+    if (!this.redisClient) return { message: 'Redis not available' };
+    
+    try {
+      const session = this.driver.session();
+      const result = await session.run(`
+        MATCH (s:Symptom)
+        RETURN s.id as id, s.description as description, s.severity as severity
+        ORDER BY s.created_at DESC
+        LIMIT $limit
+      `, { limit: neo4j.int(limit) });
+      
+      let warmed = 0;
+      for (const record of result.records) {
+        const symptomData = {
+          id: record.get('id'),
+          description: record.get('description'),
+          severity: record.get('severity')
+        };
+        
+        const cached = await this.getCachedSymptomData(symptomData.description);
+        if (!cached) {
+          await this.cacheSymptomData(symptomData.description, symptomData);
+          warmed++;
+        }
+      }
+      
+      await session.close();
+      return { 
+        message: `Warmed ${warmed} symptoms in cache`,
+        total_checked: result.records.length,
+        cache_stats: this.cacheStats
+      };
+    } catch (error) {
+      console.error('Cache warming error:', error);
+      return { error: error.message };
+    }
+  }
+
+  async getCacheStats() {
+    const stats = { ...this.cacheStats };
+    
+    if (this.redisClient) {
+      try {
+        const info = await this.redisClient.info('memory');
+        const keyspace = await this.redisClient.info('keyspace');
+        
+        stats.redis_connected = true;
+        stats.redis_memory = info;
+        stats.redis_keyspace = keyspace;
+        
+        const symptomKeys = await this.redisClient.keys('symptom:*');
+        stats.cached_symptoms = symptomKeys.length;
+      } catch (error) {
+        stats.redis_error = error.message;
+      }
+    } else {
+      stats.redis_connected = false;
+    }
+    
+    return stats;
   }
 
   async createSymptom(description, severity = 'medium', context = {}) {
@@ -47,17 +238,32 @@ class SimpleNeo4jMCP {
       });
       
       const record = result.records[0];
-      return {
+      const symptomData = {
         id: record.get('id'),
         description: record.get('description'),
+        severity,
         message: `Created symptom: ${description}`
       };
+      
+      await this.cacheSymptomData(description, symptomData);
+      
+      return symptomData;
     } finally {
       await session.close();
     }
   }
 
   async getSimilarSymptoms(description, limit = 5) {
+    const cached = await this.getCachedSymptomData(description);
+    if (cached && cached.relationships && cached.relationships.length > 0) {
+      console.log(`🎯 Returning cached similar symptoms for: ${description.substring(0, 50)}...`);
+      return cached.relationships.slice(0, limit).map(r => ({
+        id: r.similar.properties.id,
+        description: r.similar.properties.description,
+        severity: r.similar.properties.severity
+      }));
+    }
+    
     const session = this.driver.session();
     try {
       const result = await session.run(`
@@ -163,6 +369,25 @@ class SimpleNeo4jMCP {
               cypher: 'string (required)',
               params: 'object (optional)'
             }
+          },
+          {
+            name: 'warm_cache',
+            description: 'Pre-populate cache with recent symptoms',
+            parameters: {
+              limit: 'number (optional, default: 50)'
+            }
+          },
+          {
+            name: 'cache_stats',
+            description: 'Get cache performance statistics',
+            parameters: {}
+          },
+          {
+            name: 'invalidate_cache',
+            description: 'Invalidate cache for a specific symptom',
+            parameters: {
+              symptom_id: 'string (required)'
+            }
           }
         ];
         
@@ -191,6 +416,15 @@ class SimpleNeo4jMCP {
                 break;
               case 'query_graph':
                 result = await this.queryGraph(params.cypher, params.params);
+                break;
+              case 'warm_cache':
+                result = await this.warmCache(params.limit);
+                break;
+              case 'cache_stats':
+                result = await this.getCacheStats();
+                break;
+              case 'invalidate_cache':
+                result = await this.invalidateSymptomCache(params.symptom_id);
                 break;
               default:
                 throw new Error(`Unknown action: ${action}`);

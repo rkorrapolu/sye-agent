@@ -63,6 +63,7 @@ services:
       - /var/run/docker.sock:/var/run/docker.sock
       - claude_auth:/home/vscode/.config/claude
       - claude_local:/home/vscode/.local
+      - ../sye-neo4j-graph-builder:/workspace/test-app
     working_dir: /workspace
     command: tail -f /dev/null
 

@@ -17,6 +17,9 @@ case "$1" in
     echo "  • find-similar <description> [limit]" 
     echo "  • query-graph <cypher>"
     echo "  • get-stats"
+    echo "  • warm-cache [limit]"
+    echo "  • cache-stats"
+    echo "  • invalidate-cache <symptom-id>"
     echo ""
     echo "💡 Try: ./sye-tools.sh find-similar 'slow API'"
     ;;
@@ -58,6 +61,27 @@ case "$1" in
     curl -s -X POST $SYE_NEO4J_URL -H 'Content-Type: application/json' -d "{\"action\":\"query_graph\",\"params\":{\"cypher\":\"$CYPHER\"}}" | jq '.result'
     ;;
     
+  "warm-cache")
+    LIMIT="${2:-50}"
+    echo "🔥 Warming cache with $LIMIT recent symptoms..."
+    curl -s -X POST $SYE_NEO4J_URL -H 'Content-Type: application/json' -d "{\"action\":\"warm_cache\",\"params\":{\"limit\":$LIMIT}}" | jq '.result'
+    ;;
+    
+  "cache-stats")
+    echo "📊 Cache Performance Statistics:"
+    curl -s -X POST $SYE_NEO4J_URL -H 'Content-Type: application/json' -d '{"action":"cache_stats","params":{}}' | jq '.result'
+    ;;
+    
+  "invalidate-cache")
+    if [ -z "$2" ]; then
+      echo "Usage: $0 invalidate-cache <symptom-id>"
+      exit 1
+    fi
+    SYMPTOM_ID="$2"
+    echo "🗑️  Invalidating cache for symptom: $SYMPTOM_ID"
+    curl -s -X POST $SYE_NEO4J_URL -H 'Content-Type: application/json' -d "{\"action\":\"invalidate_cache\",\"params\":{\"symptom_id\":\"$SYMPTOM_ID\"}}" | jq '.result'
+    ;;
+    
   "health")
     echo "🏥 System Health Check:"
     echo "Neo4j MCP Server: $(curl -s $SYE_NEO4J_URL/health | jq -r '.status')"
@@ -82,6 +106,11 @@ case "$1" in
     echo ""
     echo "# Get statistics"
     echo "./sye-tools.sh get-stats"
+    echo ""
+    echo "# Cache Management"
+    echo "./sye-tools.sh warm-cache 100       # Pre-load 100 symptoms"
+    echo "./sye-tools.sh cache-stats          # Show cache performance"
+    echo "./sye-tools.sh invalidate-cache <id> # Clear specific cache entry"
     ;;
     
   *)
@@ -95,6 +124,9 @@ case "$1" in
     echo "  create-symptom  - Create new symptom: <description> [severity]"
     echo "  find-similar    - Find similar symptoms: <description> [limit]"
     echo "  query-graph     - Execute Cypher query: <cypher>"
+    echo "  warm-cache      - Pre-populate cache with recent symptoms: [limit]"
+    echo "  cache-stats     - Show cache performance statistics"
+    echo "  invalidate-cache- Invalidate cache for symptom: <symptom-id>"
     echo "  health          - System health check"
     echo "  examples        - Show example usage"
     echo ""
