@@ -1,0 +1,25 @@
+{
+  "mcpServers": {
+    "neo4j": {
+      "command": "node",
+      "args": ["/workspace/.devcontainer/mcp-neo4j-server.js"],
+      "env": {
+        "NEO4J_URI": "bolt://neo4j:7687",
+        "NEO4J_USER": "neo4j",
+        "NEO4J_PASSWORD": "password123"
+      }
+    },
+    "composio": {
+      "command": "node", 
+      "args": ["/workspace/.devcontainer/mcp-composio-server.js"],
+      "env": {
+        "COMPOSIO_API_KEY": "your-composio-key-here"
+      }
+    },
+    "filesystem": {
+      "command": "npx",
+      "args": ["@anthropic/mcp-server-filesystem", "/workspace"],
+      "env": {}
+    }
+  }
+}

@@ -1,0 +1,76 @@
+version: '3.8'
+
+services:
+  neo4j:
+    image: neo4j:5.15-community
+    container_name: sye-neo4j
+    ports:
+      - "7474:7474"  # HTTP
+      - "7687:7687"  # Bolt
+    environment:
+      - NEO4J_AUTH=neo4j/password123
+      - NEO4J_PLUGINS=["apoc"]
+      - NEO4J_dbms_security_procedures_unrestricted=apoc.*
+    volumes:
+      - neo4j_data:/data
+      - neo4j_logs:/logs
+      - neo4j_import:/var/lib/neo4j/import
+      - neo4j_plugins:/plugins
+
+  redis:
+    image: redis:7-alpine
+    container_name: sye-redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+
+  app:
+    build: .
+    container_name: sye-app
+    ports:
+      - "8000:8000"
+    environment:
+      - NEO4J_URI=bolt://neo4j:7687
+      - NEO4J_USER=neo4j
+      - NEO4J_PASSWORD=password123
+      - REDIS_URL=redis://redis:6379
+    depends_on:
+      - neo4j
+      - redis
+    volumes:
+      - .:/app
+      - /var/run/docker.sock:/var/run/docker.sock
+    working_dir: /app
+
+  claude-reasoning:
+    build:
+      context: .
+      dockerfile: .devcontainer/Dockerfile
+    container_name: sye-claude-reasoning
+    environment:
+      - NEO4J_URI=bolt://neo4j:7687
+      - NEO4J_USER=neo4j
+      - NEO4J_PASSWORD=password123
+      - REDIS_URL=redis://redis:6379
+      - CLAUDE_DANGEROUS_SKIP_PERMISSIONS=true
+      - MCP_NEO4J_PORT=3001
+    depends_on:
+      - neo4j
+      - redis
+    volumes:
+      - .:/workspace
+      - /var/run/docker.sock:/var/run/docker.sock
+      - claude_auth:/home/vscode/.config/claude
+      - claude_local:/home/vscode/.local
+    working_dir: /workspace
+    command: tail -f /dev/null
+
+volumes:
+  neo4j_data:
+  neo4j_logs:
+  neo4j_import:
+  neo4j_plugins:
+  redis_data:
+  claude_auth:
+  claude_local:
