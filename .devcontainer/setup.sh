@@ -38,8 +38,12 @@ nohup node /workspace/.devcontainer/mcp-neo4j-server.js > /workspace/logs/mcp-ne
 nohup node /workspace/.devcontainer/mcp-composio-server.js > /workspace/logs/mcp-composio.log 2>&1 &
 
 echo "✅ SYE Claude Reasoning Layer setup complete!"
+
+# Run auto-start script
+/workspace/.devcontainer/auto-start.sh
+
 echo "🔗 Neo4j Browser: http://localhost:7474"
 echo "📊 Redis: redis://localhost:6379"
 echo "🧠 Claude Code ready with --dangerously-skip-permissions"
 echo ""
-echo "Try: claude --help"
+echo "Try: ./sye-tools where-are-we"

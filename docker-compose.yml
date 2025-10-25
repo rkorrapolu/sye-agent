@@ -54,12 +54,15 @@ services:
       - NEO4J_PASSWORD=password123
       - REDIS_URL=redis://redis:6379
       - CLAUDE_DANGEROUS_SKIP_PERMISSIONS=true
+      - MCP_NEO4J_PORT=3001
     depends_on:
       - neo4j
       - redis
     volumes:
       - .:/workspace
       - /var/run/docker.sock:/var/run/docker.sock
+      - claude_auth:/home/vscode/.config/claude
+      - claude_local:/home/vscode/.local
     working_dir: /workspace
     command: tail -f /dev/null
 
@@ -69,3 +72,5 @@ volumes:
   neo4j_import:
   neo4j_plugins:
   redis_data:
+  claude_auth:
+  claude_local:

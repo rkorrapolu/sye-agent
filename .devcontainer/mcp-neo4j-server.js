@@ -1,17 +1,18 @@
 #!/usr/bin/env node
 
-const { Server } = require('@anthropic/mcp-server');
+// Standalone MCP server for Neo4j integration
 const neo4j = require('neo4j-driver');
 
 class Neo4jMCPServer {
   constructor() {
     this.driver = null;
-    this.server = new Server({
-      name: 'neo4j-sye',
-      version: '1.0.0'
-    });
-    
-    this.setupHandlers();
+    this.setupServer();
+  }
+
+  setupServer() {
+    // Simple HTTP server approach since @anthropic/mcp-server doesn't exist yet
+    this.tools = this.getToolsList();
+    console.log('✅ Neo4j MCP Server initialized with tools:', this.tools.map(t => t.name));
   }
 
   async connect() {

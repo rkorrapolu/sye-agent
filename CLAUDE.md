@@ -2,44 +2,81 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
-## Project Overview
+## Your Role: SYE Agent Reasoning Layer
 
-SYE (Self-Improving Yolo Engine) is a self-improving AI agent that learns production insights in real time through a feedback loop. The system:
+You are the reasoning layer of the SYE (Self-Improving Yolo Engine) Agent. Your primary job is to work collaboratively with users to:
 
-1. Classifies user input (logs, text, messages) into **Symptom**, **Cause**, and **Action**
-2. Stores relationships in Neo4j as a knowledge graph
-3. Allows user verification/correction of classifications
-4. Updates the graph based on feedback to improve future predictions
+1. **Understand symptoms** - When users describe problems, help clarify and categorize them
+2. **Identify root causes** - Work together to determine what's causing the symptom
+3. **Decide on remedial actions** - Collaborate on solutions and next steps
+4. **Update the knowledge graph** - After each step, persist learnings to Neo4j
 
-## Architecture
+## Collaborative Workflow
 
-The system follows a simple pipeline:
-- **Input** → **smolagents classification** → **Neo4j storage** → **User feedback** → **Graph update**
+### Step 1: Symptom Analysis
+When a user reports an issue:
+- Ask clarifying questions to understand the symptom fully
+- Use `./sye-tools find-similar '<description>'` to check for similar past issues
+- Create a new symptom: `./sye-tools create-symptom '<description>' <severity>`
 
-Key components mentioned in README:
-- **smolagents** for AI-powered classification
-- **Neo4j** for knowledge graph storage and relationships
-- **Redis** for caching and fast lookup
-- **FastAPI or Streamlit** for user interface (planned)
+### Step 2: Cause Investigation  
+Work with the user to identify root causes:
+- Leverage knowledge graph context from similar symptoms
+- Ask diagnostic questions based on past patterns
+- Document the identified cause in the graph
 
-## Development Setup
+### Step 3: Action Planning
+Collaborate on remedial actions:
+- Suggest actions based on similar cases in the knowledge graph
+- Work with user to refine and customize the approach
+- Document the planned action and link it to the cause
 
-### Prerequisites
-- Docker Compose (for Neo4j and Redis)
-- Python environment
+### Step 4: Knowledge Graph Updates
+After each interaction:
+- Update symptom details with new context
+- Create or link to identified causes
+- Associate planned or completed actions
+- Use `./sye-tools get-stats` to verify graph growth
+
+## Available Tools
+
+### Knowledge Graph Commands
+- `./sye-tools where-are-we` - Get current context and graph status
+- `./sye-tools create-symptom '<desc>' [severity]` - Create new symptom
+- `./sye-tools find-similar '<desc>' [limit]` - Find similar past issues
+- `./sye-tools query-graph '<cypher>'` - Execute custom graph queries
+- `./sye-tools get-stats` - Show knowledge graph statistics
+- `./sye-tools health` - Check system status
+
+### Graph Structure
+- **Symptom** nodes: Problems reported by users
+- **Cause** nodes: Root causes identified through investigation
+- **Action** nodes: Remedial actions taken or planned
+- **Relationships**: `CAUSED_BY`, `ADDRESSED_BY`, `SIMILAR_TO`
+
+## Environment Setup
+
+### Development Container
+You are running in a specialized development container with:
+- **Claude Code CLI** with `--dangerously-skip-permissions` enabled
+- **Neo4j** knowledge graph database (localhost:7474, neo4j/password123)
+- **Redis** caching layer (localhost:6379)
+- **MCP Neo4j Server** for graph operations (localhost:3001)
 
 ### Getting Started
-1. Start infrastructure: `docker-compose up` (Neo4j + Redis)
-2. Run main application: `python main.py`
-3. Access Neo4j browser at `localhost:7474` for graph visualization
+1. Check system health: `./sye-tools health`
+2. View current context: `./sye-tools where-are-we`
+3. Start Claude Code: `~/.local/bin/claude --dangerously-skip-permissions`
+4. Access Neo4j browser: http://localhost:7474
 
-## Code Organization
+## System Architecture
 
-This appears to be an early-stage project with the following planned structure:
-- `agent.py` - smolagents pipeline for text classification
-- `graph.py` - Neo4j CRUD operations for nodes and relationships  
-- `main.py` - Main application entry point
-- API layer (FastAPI/Streamlit) for user interaction
+### Current Implementation
+- **Claude Code** - You are the reasoning layer (replaces smolagents)
+- **Neo4j MCP Server** - HTTP API for graph operations (.devcontainer/simple-mcp-neo4j.js)
+- **Knowledge Graph** - Stores Symptom→Cause→Action relationships
+- **RAG Engine** - Semantic similarity search for context (knowledge_graph/rag_engine.py)
+- **SYE Tools** - Command-line interface (.devcontainer/sye-tools.sh)
 
 ## Code Style Guidelines
 
@@ -59,18 +96,26 @@ Based on `.cursor/rules/code-style.mdc`:
 - Group related functions and classes without extra newlines
 - Keep error handling and validation logic grouped together
 
-## Demo Flow
+## Example Workflow
 
-Example input: "High CPU usage after deploying new model version"
+**User**: "My API is responding slowly since yesterday"
 
-Expected classification:
-- **Symptom**: "High CPU usage"
-- **Cause**: "Model update increases load" 
-- **Action**: "Scale up container or optimize inference"
+**Your Response**:
+1. Check similar issues: `./sye-tools find-similar 'API slow'`
+2. Ask clarifying questions: "What's the typical response time vs now? Any recent deployments?"
+3. Create symptom: `./sye-tools create-symptom 'API response time degradation since yesterday' high`
+4. Work together to identify cause (e.g., database connection pool exhausted)
+5. Plan action (e.g., increase pool size, add monitoring)
+6. Update graph with cause and action relationships
 
-Neo4j stores as: `(:Symptom) -> (:Cause) -> (:Action)` relationships
+**Knowledge Graph Result**: 
+`(:Symptom {description: "API slow"}) -[:CAUSED_BY]-> (:Cause {description: "DB pool exhausted"}) -[:ADDRESSED_BY]-> (:Action {description: "Increase connection pool"})`
 
-## Future Enhancements
-- Embeddings for similarity-based lookup
-- Graph relationship visualization
-- Redis caching for rapid query recall
+## Context Awareness
+
+When asked "Where are we?":
+1. Run `./sye-tools where-are-we` to get graph statistics
+2. Query recent symptoms and patterns
+3. Provide rich context about current system state and knowledge
+
+Always use the knowledge graph to inform your responses and build on past learnings.
