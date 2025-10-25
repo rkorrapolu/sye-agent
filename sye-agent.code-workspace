@@ -1,0 +1,54 @@
+{
+  "folders": [
+    {
+      "name": "sye-agent",
+      "path": "./"
+    },
+    {
+      "path": "agents/mami"
+    }
+  ],
+  "settings": {
+    "java.configuration.updateBuildConfiguration": "disabled",
+    "editor.formatOnSave": true,
+    "editor.codeActionsOnSave": {
+      "source.fixAll": "explicit",
+      "source.organizeImports": "explicit"
+    },
+    "files.exclude": {
+      "tools/video_analysis": true,
+      "agents/mami": true,
+    },
+    "markdownlint.config": {
+      "MD001": false,
+      "MD004": false,
+      "MD007": false,
+      "MD022": false,
+      "MD026": false,
+      "MD030": false,
+      "MD033": {
+        "allowed_elements": [
+          "meta",
+          "topic",
+          "author",
+          "divider",
+          "intro",
+          "highlight",
+          "footer",
+          "ad",
+          "br",
+          "a"
+        ]
+      },
+      "MD031": false,
+      "MD036": false,
+      "MD041": false,
+      "MD032": false,
+      "MD036": false
+      // "MD041": {
+      //   "level": 4
+      // },
+    },
+    "typescript.tsdk": "node_modules/typescript/lib"
+  }
+}
