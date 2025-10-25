@@ -66,3 +66,113 @@ User corrects if necessary. Agent stores the validated relationship for future p
 - Add embeddings for similarity-based lookup.  
 - Visualize graph relationships in browser.  
 - Cache last N queries in Redis for rapid recall.  
+
+---
+
+### Redis vs Neo4j
+
+**Redis strengths:**
+- **Speed**: Sub-millisecond lookups critical for production observability
+- **Simple setup**: 5 minutes vs 15-20 for Neo4j
+- **State management**: Perfect for agent memory and caching recent classifications
+
+**Neo4j advantages:**
+- **Relationship queries**: Native pattern matching (e.g., "find all symptoms leading to this cause")
+- **Multi-hop reasoning**: Natural graph traversal for learning patterns
+- **Self-improvement**: Confidence score updates on relationships are elegant
+
+### Graph Schema
+
+**Node Types:**
+1. **Symptom** - Observable problems (high latency, locked connections, replication lag)
+2. **Cause** - Root causes (ALTER TABLE lock, full table scan)
+3. **Action** - Remediation steps (terminate query, use CHECK constraints)
+4. **Input** - Raw user input
+5. **Incident** - Aggregates multiple symptoms
+
+**Key Relationships:**
+- `LEADS_TO` (Symptom → Cause) with confidence score
+- `RESOLVED_BY` (Cause → Action) with effectiveness score
+- `SIMILAR_TO` (for clustering similar patterns)
+
+The [AIOps](https://coroot.com/blog/engineering/using-ai-for-troubleshooting-openai-vs-deepseek/) example maps to:
+```cypher
+(s:Symptom {text:"High query latency"})-[:LEADS_TO {confidence:0.85}]->
+(c:Cause {text:"ALTER TABLE lock"})-[:RESOLVED_BY {effectiveness:0.92}]->
+(a:Action {text:"Terminate with pg_terminate_backend"})
+```
+
+## System Architecture
+
+### Three-Agent Design
+
+**1. ClassifierAgent** (CodeAgent)
+- Ingests raw logs/metrics using `coroot/logparser` tool
+- Extracts Symptom, Cause, Action using LLM reasoning
+- Outputs Python code with structured results
+
+**2. DecisionAgent** (CodeAgent)  
+- Queries knowledge graph for similar patterns
+- Decides: CREATE_NEW, UPDATE_EXISTING, or ASK_CLARIFICATION
+- Uses similarity_search and graph_query tools
+
+**3. ExecutorAgent** (CodeAgent)
+- Executes Cypher queries to update Neo4j
+- Updates Redis cache for fast lookups
+- Increments confidence scores based on user feedback
+
+### Data Flow Sequence
+
+```
+User Input → Classifier → Verification → Decision → Executor → Storage
+     ↑                                                            │
+     └────────────────── Learning Feedback ──────────────────────┘
+```
+
+## Execution Strategy
+
+### Hybrid Approach
+
+**Step 1: Redis MVP**
+- Build basic Symptom→Cause→Action storage in Redis JSON
+- Get one agent working end-to-end
+- Focus on core functionality
+
+**Step 2: Add Neo4j**
+- Migrate Redis data to Neo4j
+- Build graph relationships
+- Prepare visualization for demo
+
+**Step 3: Demo Polish**
+- Show Redis for real-time speed
+- Show Neo4j Browser for visual "wow factor"
+- Demonstrate learning via confidence updates
+
+## Tool Integration: coroot/logparser
+
+The `logparser` tool will be your first tool:[6]
+
+```python
+@tool
+def parse_logs(log_text: str) -> dict:
+    """Extract patterns using coroot/logparser"""
+    # Run: echo log_text | docker run -i ghcr.io/coroot/logparser
+    # Returns: {pattern, severity, frequency, components}
+```
+
+This gives structured data to feed the ClassifierAgent.
+
+## Critical Success Factors
+
+1. Docker Compose running (Redis + Neo4j)
+2. One ClassifierAgent working
+3. `logparser_tool` functional
+4. Redis storage operational
+5. User verification loop
+6. One complete demo scenario
+
+**Stretch goals:**
+- Neo4j visualization
+- Parallel agent execution
+- Embeddings for similarity
+- Web UI with Streamlit
