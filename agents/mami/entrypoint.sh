@@ -1,22 +1,22 @@
-#!/usr/bin/env bash
-set -euo pipefail
+#!/bin/bash
+set -e
 
-CONF="/etc/supervisor/conf.d/supervisord.conf"
-
-# Load environment variables from .env if present
+# Load environment variables
 if [ -f /sye/mami/.env ]; then
   echo "Loading environment variables from .env..."
-  set -a; source /sye/mami/.env; set +a
+  export $(grep -v '^#' /sye/mami/.env | xargs)
+else
+  echo "Warning: .env file not found at /sye/mami/.env"
 fi
 
-# Defaults
+# Set defaults if not provided
 export REDIS_PORT=${REDIS_PORT:-6379}
 export NEO4J_USERNAME=${NEO4J_USERNAME:-neo4j}
 export NEO4J_PASSWORD=${NEO4J_PASSWORD:-hackathon2024}
 
-# Ensure directories exist
-mkdir -p /var/log/supervisor
-mkdir -p /etc/supervisor/conf.d
+# Print loaded variables for debugging
+echo "Environment variables loaded:"
+env | grep -E "^(REDIS_|NEO4J_|OPENAI_|GOOGLE_|ANTHROPIC_)" | cut -d= -f1 | sort
 
 # Force complete Neo4j password reset
 if [ -n "$NEO4J_PASSWORD" ]; then
@@ -27,10 +27,10 @@ if [ -n "$NEO4J_PASSWORD" ]; then
   mkdir -p "$NEO4J_HOME/data/databases"
 fi
 
-# Create supervisord config if missing
-if [ ! -f "$CONF" ]; then
-  echo "Generating $CONF ..."
-  cat > "$CONF" <<EOF
+# Generate supervisord configuration dynamically
+echo "Creating supervisord configuration..."
+mkdir -p /etc/supervisor/conf.d
+cat > /etc/supervisor/conf.d/supervisord.conf <<EOF
 [supervisord]
 nodaemon=true
 user=root
@@ -78,23 +78,18 @@ stderr_logfile_maxbytes=0
 priority=3
 environment=PYTHONUNBUFFERED="1"
 EOF
-fi
 
-# Start supervisord only if not running
-if ! pgrep -x supervisord >/dev/null 2>&1; then
-  echo "Starting supervisord..."
-  /usr/bin/supervisord -c "$CONF" &
-  SUP_PID=$!
-  echo "Services starting (supervisord pid=$SUP_PID). Waiting briefly..."
-  sleep 3
+# Verify config file was created
+if [ -f /etc/supervisor/conf.d/supervisord.conf ]; then
+  echo "✅ Supervisord configuration created successfully"
+  echo "Config file contents:"
+  cat /etc/supervisor/conf.d/supervisord.conf
 else
-  echo "Supervisord already running. Skipping start."
+  echo "❌ Failed to create supervisord configuration"
+  exit 1
 fi
 
-# Show service status (best-effort)
-supervisorctl -c "$CONF" status || ps aux | grep -E "redis-server|neo4j|supervisord" | grep -v grep || true
+# Start supervisord
+echo "Starting supervisord..."
+exec /usr/bin/supervisord -c /etc/supervisor/conf.d/supervisord.conf
 
-# Drop into interactive shell with uv on PATH
-export PATH="/sye/mami/.venv/bin:$PATH:/root/.local/bin:$PATH"
-cd /sye/mami
-exec bash -l
