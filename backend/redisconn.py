@@ -8,11 +8,11 @@ import redis
 class rclient:
     def __init__(self):
         self.r = redis.Redis(
-            host='redis-11623.c253.us-central1-1.gce.redns.redis-cloud.com',
-            port=11623,
+            host=os.getenv("REDIS_HOST", "localhost"),
+            port=os.getenv("REDIS_PORT", "6379"),
             decode_responses=True,
-            username="default",
-            password="3e61Hp9yvrxAu2Tht1XPXeIDSs9oL1xK",
+            username=os.getenv("REDIS_USER", "default"),
+            password=os.getenv("REDIS_PASSWORD", "")
     )
     
     def create(self, key: str) -> str:
